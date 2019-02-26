@@ -1,0 +1,86 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: Reference Architecture to host Drupal on AWS - Creates Route 53 record set (if selected)
+
+Metadata:
+
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label:
+        default: Route 53 Parameters
+      Parameters:
+        - DomainName
+        - SubDomainName
+        - CfDnsEndpoint
+        - DnsEndpoint
+        - CfDnsHostId
+        - DnsHostId
+    ParameterLabels:
+      CfDnsEndpoint:
+        default CF DNS Endpoint
+      DnsEndpoint:
+        default: DNS Endpoint
+      CfDnsHostId:
+        default: CF DNS Host Id
+      DnsHostId:
+        default: DNS Host Id
+      DomainName:
+        default: Site Domain
+      SubDomainName:
+        default: Site Sub Domain 
+      CfSubDomainName:
+        default: CloudFront Site Sub Domain
+
+Parameters:
+
+  CfDnsEndpoint:
+    AllowedPattern: ^(?!http)(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$
+    Description: The CloudFront DNS endpoint.
+    Type: String
+  DnsEndpoint:
+    AllowedPattern: ^(?!http)(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$
+    Description: The DNS endpoint - CloudFront DNS if using CloudFront else Public ELB DNS name.
+    Type: String
+  CfDnsHostId:
+    AllowedPattern: ^[A-Z0-9]{14}$
+    Description: The CF DNS host zone id - 'Z2FDTNDATAQYW2' if using CloudFront.
+    Type: String
+  DnsHostId:
+    AllowedPattern: ^[A-Z0-9]{14}$
+    Description: The Public ELB DNS host zone id.
+    Type: String
+  DomainName:
+    AllowedPattern: ^(?!http)(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$
+    Description: The main domain name of the Drupal site (e.g. example.com).
+    Type: String
+  SubDomainName:
+    AllowedPattern: ^([a-zA-Z0-9])([a-zA-Z0-9_-])*([a-zA-Z0-9])$
+    Description: '[ Optional ] Subdomain name of the Drupal site (e.g. drupalsite to get  drupalsite.example.com). Leave empty to use the default'
+    Type: String
+  CfSubDomainName:
+    AllowedPattern: ^([a-zA-Z0-9])([a-zA-Z0-9_-])*([a-zA-Z0-9])$
+    Description: '[ Optional ] Subdomain name of the CloudFront Drupal site (e.g. drupal to get  drupal.example.com). Leave empty to use the default'
+    Type: String
+
+Resources:
+
+  RecordSet:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneName: !Join ['', [!Ref DomainName, '.']]
+      RecordSets:
+      - Name: !Join ['', [!Ref SubDomainName, '.', !Ref DomainName, '.']]
+        Type: A
+        AliasTarget:
+          DNSName: !Ref DnsEndpoint
+          EvaluateTargetHealth: True
+          HostedZoneId: !Ref DnsHostId
+      - Name: !Join ['', [!Ref CfSubDomainName, '.', !Ref DomainName, '.']]
+        Type: A
+        AliasTarget:
+          DNSName: !Ref CfDnsEndpoint
+          EvaluateTargetHealth: True
+          HostedZoneId: !Ref CfDnsHostId
+
+

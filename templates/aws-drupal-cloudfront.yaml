@@ -1,0 +1,131 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: Reference Architecture to host Drupal on AWS - Creates CloudFront distribution (if selected)
+
+Metadata:
+
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label:
+        default: AWS Parameters
+      Parameters:
+        - CloudFrontAcmCertificate
+        - DomainName
+        - PublicAlbDnsName
+        - SubDomainName
+        - CfSubDomainName
+    ParameterLabels:
+      CloudFrontAcmCertificate:
+        default: CloudFront Certificate ARN
+      PublicAlbDnsName:
+        default: Public ALB DNS Name
+      DomainName:
+        default: Domain name of the Drupal site
+      SubDomainName:
+        default: Subdomain name of the Drupal site
+      CfSubDomainName:
+        default: CF Subdomain name of the Drupal site
+
+Parameters:
+
+  CloudFrontAcmCertificate:
+    AllowedPattern: ^$|(arn:aws:acm:)([a-z0-9/:-])*([a-z0-9])$
+    Description: '[ Optional ] The AWS Certification Manager certificate ARN for the CloudFront distribution certificate - this certificate should be created in the us-east-1 (N. Virginia) region and must reference the Drupal domain name you use below.'
+    Type: String
+  PublicAlbDnsName:
+    Description: The public application load balancer dns name.
+    Type: String
+  DomainName:
+    AllowedPattern: ^$|(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$
+    Description: '[ Optional ] The main domain name of the Drupal site (e.g. example.com).'
+    Type: String
+  SubDomainName:
+    AllowedPattern: ^([a-zA-Z0-9])([a-zA-Z0-9_-])*([a-zA-Z0-9])$
+    Description: '[ Optional ] Subdomain name of the Drupal site (e.g. drupalsite to get  drupalsite.example.com). Leave empty to use the default'
+    Type: String
+  CfSubDomainName:
+    AllowedPattern: ^([a-zA-Z0-9])([a-zA-Z0-9_-])*([a-zA-Z0-9])$
+    Description: '[ Optional ] CloudFront Subdomain name of the Drupal site (e.g. drupal to get  drupal.example.com). Leave empty to use the default'
+    Type: String
+
+Conditions:
+
+  SslCertificate:
+    !Not [ !Equals [ '', !Ref CloudFrontAcmCertificate ] ]
+  NoSslCertificate:
+    !Equals [ '', !Ref CloudFrontAcmCertificate ]
+  DomainName:
+    !Not [ !Equals [ '', !Ref DomainName ] ]  
+  NoDomainName:
+    !Equals [ '', !Ref DomainName ]
+
+Resources:
+
+  CloudFrontDistributionSslCertificate:
+    Type: AWS::CloudFront::Distribution
+    Condition: SslCertificate
+    Properties:
+      DistributionConfig:
+        Aliases:
+        - !If [ DomainName, !Join [ '', [ '*.', !Ref DomainName ] ], !Ref 'AWS::NoValue' ]
+        CacheBehaviors:
+        - PathPattern: /*
+          AllowedMethods:
+          - DELETE
+          - GET
+          - HEAD
+          - OPTIONS
+          - PATCH
+          - POST
+          - PUT
+          DefaultTTL: 900
+          MaxTTL: 900
+          MinTTL: 900
+          ForwardedValues:
+            QueryString: true
+            Headers:
+            - Host
+          TargetOriginId: elb
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+        Comment: !Ref 'AWS::StackName'
+        DefaultCacheBehavior:
+          AllowedMethods:
+          - DELETE
+          - GET
+          - HEAD
+          - OPTIONS
+          - PATCH
+          - POST
+          - PUT
+          DefaultTTL: 0
+          MaxTTL: 0
+          MinTTL: 0
+          ForwardedValues:
+            QueryString: true
+            Headers:
+            - '*'
+            Cookies:
+              Forward: all
+          TargetOriginId: elb
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+        Enabled: true
+        Origins:
+        - DomainName:  !Join [ '', [ !Ref SubDomainName, '.', !Ref DomainName ] ]
+          Id: elb
+          CustomOriginConfig:
+            OriginProtocolPolicy: https-only
+        PriceClass: PriceClass_100
+        ViewerCertificate:
+          AcmCertificateArn: !Ref CloudFrontAcmCertificate
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1
+
+Outputs:
+
+  DnsEndpoint:
+    Value: !GetAtt CloudFrontDistributionSslCertificate.DomainName
+  DnsHostname:
+    Value: !Join [ '', [ 'https://', !GetAtt CloudFrontDistributionSslCertificate.DomainName ] ]
